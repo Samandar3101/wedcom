@@ -16,6 +16,7 @@ static/
 *.sqlite3
 db.sqlite3
 migrations/
+delete_migrations.py
 
 # Hujjatlar va rasmlar
 *.pptx
