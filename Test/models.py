@@ -1,9 +1,11 @@
+import uuid
 from django.db import models
 from Base.models import BaseModel
 from CustomerUser.models import CustomerUser
 from Course.models import Course
 
 class Test(BaseModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     title = models.CharField(max_length=200)
     description = models.TextField()
     course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='tests')
@@ -20,6 +22,7 @@ class Test(BaseModel):
         verbose_name_plural = 'Tests'
 
 class Question(BaseModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     test = models.ForeignKey(Test, on_delete=models.CASCADE, related_name='questions')
     text = models.TextField()
     points = models.IntegerField(default=1)
@@ -34,6 +37,7 @@ class Question(BaseModel):
         ordering = ['order']
 
 class Answer(BaseModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     question = models.ForeignKey(Question, on_delete=models.CASCADE, related_name='answers')
     text = models.TextField()
     is_correct = models.BooleanField(default=False)
@@ -45,7 +49,8 @@ class Answer(BaseModel):
         verbose_name = 'Answer'
         verbose_name_plural = 'Answers'
 
-class TestResult(models.Model):
+class TestResult(BaseModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     test = models.ForeignKey(Test, on_delete=models.CASCADE, related_name='results')
     user = models.ForeignKey(CustomerUser, on_delete=models.CASCADE, related_name='test_results')
     score = models.DecimalField(max_digits=5, decimal_places=2, null=True)
@@ -53,8 +58,6 @@ class TestResult(models.Model):
     started_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True)
     answers = models.JSONField(default=dict)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"{self.test.title} - {self.user.email}"

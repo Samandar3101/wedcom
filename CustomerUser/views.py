@@ -183,26 +183,36 @@ class LoginView(APIView):
     permission_classes = [permissions.AllowAny]
     
     def post(self, request):
-        email = request.data.get('email')
+        username = request.data.get('username')  # username yoki email bo'lishi mumkin
         password = request.data.get('password')
         
-        if not email or not password:
+        if not username or not password:
             return Response(
-                {"detail": "Email va parolni kiriting"},
+                {"detail": "Username/email va parolni kiriting"},
                 status=status.HTTP_400_BAD_REQUEST
             )
             
-        user = authenticate(email=email, password=password)
+        # Username yoki email orqali foydalanuvchini qidirish
+        user = None
+        user_by_username = CustomerUser.objects.filter(username=username).first()
+        user_by_email = CustomerUser.objects.filter(email=username).first()
+        user = user_by_username or user_by_email
         
         if user:
-            refresh = RefreshToken.for_user(user)
-            return Response({
-                'user': CustomerUserSerializer(user).data,
-                'refresh': str(refresh),
-                'access': str(refresh.access_token),
-            })
+            authenticated_user = authenticate(username=user.username, password=password)
+            if authenticated_user and authenticated_user.is_active:
+                refresh = RefreshToken.for_user(authenticated_user)
+                return Response({
+                    'user': CustomerUserSerializer(authenticated_user).data,
+                    'refresh': str(refresh),
+                    'access': str(refresh.access_token),
+                })
+            return Response(
+                {"detail": "Noto'g'ri parol"},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
         return Response(
-            {"detail": "Noto'g'ri email yoki parol"},
+            {"detail": "Bunday foydalanuvchi topilmadi"},
             status=status.HTTP_401_UNAUTHORIZED
         )
 

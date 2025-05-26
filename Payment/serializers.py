@@ -3,6 +3,7 @@ from .models import Payment
 from CustomerUser.models import CustomerUser
 from Course.models import Course
 from django.utils import timezone
+from decimal import Decimal
 
 class PaymentSerializer(serializers.Serializer):
     id = serializers.UUIDField(read_only=True)
@@ -22,31 +23,29 @@ class PaymentSerializer(serializers.Serializer):
     refund_reason = serializers.CharField(required=False, allow_blank=True)
 
     def validate(self, data):
+        # On update, skip required field checks
+        if self.instance:
+            return data
         # Ensure method is provided and valid
         method = data.get('method')
         if not method:
             raise serializers.ValidationError("To'lov usuli kiritilishi shart.")
         if method not in dict(Payment.PAYMENT_METHODS):
             raise serializers.ValidationError(f"'{method}' to'g'ri to'lov usuli emas.")
-        
         # Validate course exists and has a price
         course = data.get('course')
         if not course:
             raise serializers.ValidationError("Kurs tanlanishi shart.")
-        
         if not hasattr(course, 'price') or not course.price:
             raise serializers.ValidationError("Kurs narxi to'g'ri ko'rsatilmagan.")
-        
         # Validate payment method based on amount
         amount = course.price
-        if method == 'cash' and amount > 1000000:  # 1 million so'm
+        if method == 'cash' and amount > Decimal('1000000'):
             raise serializers.ValidationError(
                 "Naqd pul orqali to'lov 1 million so'mdan oshmasligi kerak"
             )
-        
         # Set amount from course price
         data['amount'] = amount
-        
         return data
 
     def create(self, validated_data):
@@ -78,44 +77,36 @@ class PaymentRefundSerializer(serializers.Serializer):
     def validate(self, data):
         payment = self.context['payment']
         amount = data.get('amount')
-        
         if amount is None:
             amount = payment.amount
-        
-        if amount <= 0:
+        if amount <= Decimal('0'):
             raise serializers.ValidationError(
                 "Qaytariladigan summa 0 dan katta bo'lishi kerak"
             )
-        
         if amount > payment.amount:
             raise serializers.ValidationError(
                 "Qaytariladigan summa to'lov summasidan ko'p bo'lishi mumkin emas"
             )
-        
         if payment.status != 'completed':
             raise serializers.ValidationError(
                 "Faqat yakunlangan to'lovlarni qaytarish mumkin"
             )
-        
         if payment.refund_amount:
             raise serializers.ValidationError(
                 "Bu to'lov allaqachon qaytarilgan"
             )
-        
-        # Check if refund is within allowed time period (e.g., 30 days)
+        # Check if refund is within allowed time period (30 days)
         if payment.payment_date:
             days_since_payment = (timezone.now() - payment.payment_date).days
             if days_since_payment > 30:
-                raise serializers.ValidationError(
-                    "To'lovdan keyin 30 kundan o'tgan bo'lsa, qaytarish mumkin emas"
-                )
-        
+                raise serializers.ValidationError({
+                    'non_field_errors': ["To'lovdan keyin 30 kundan o'tgan bo'lsa, qaytarish mumkin emas"]
+                })
         # Validate reason length
         reason = data.get('reason', '').strip()
         if len(reason) < 10:
             raise serializers.ValidationError(
                 "Qaytarish sababi kamida 10 ta belgidan iborat bo'lishi kerak"
             )
-        
         data['amount'] = amount
         return data

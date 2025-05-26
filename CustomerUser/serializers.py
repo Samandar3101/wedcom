@@ -5,8 +5,8 @@ from .models import CustomerUser, UserActivity, Notification
 class CustomerUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomerUser
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'phone', 'is_active', 'is_staff', 'date_joined', 'last_login', 'last_login_ip']
-        read_only_fields = ['id', 'date_joined', 'last_login', 'last_login_ip']
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'phone_number', 'is_active', 'is_staff', 'created_at', 'last_login']
+        read_only_fields = ['id', 'created_at', 'last_login']
 
 class CustomerUserCreateSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True, style={'input_type': 'password'})
@@ -14,11 +14,18 @@ class CustomerUserCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CustomerUser
-        fields = ['username', 'email', 'password', 'password_confirm', 'first_name', 'last_name', 'phone', 'role']
+        fields = ['username', 'email', 'phone_number', 'password', 'password_confirm', 'first_name', 'last_name', 'role']
 
     def validate(self, data):
         if data['password'] != data['password_confirm']:
             raise serializers.ValidationError({"password_confirm": "Parollar mos kelmadi"})
+        
+        # Email yoki phone_numberdan faqat bittasi bo'lishi kerak
+        if data.get('email') and data.get('phone_number'):
+            raise serializers.ValidationError("Faqat bitta: email yoki phone_number bo'lishi shart!")
+        if not data.get('email') and not data.get('phone_number'):
+            raise serializers.ValidationError("Email yoki phone_number kiritilishi shart!")
+            
         return data
 
     def create(self, validated_data):
@@ -60,10 +67,10 @@ class ChangePasswordSerializer(serializers.Serializer):
     new_password = serializers.CharField(required=True)
     confirm_password = serializers.CharField(required=True)
 
-def validate(self, data):
-     if data['new_password'] != data['confirm_password']:
-        raise serializers.ValidationError("New passwords do not match")
-     return data
+    def validate(self, data):
+        if data['new_password'] != data['confirm_password']:
+            raise serializers.ValidationError("New passwords do not match")
+        return data
 
 class PhoneVerificationSerializer(serializers.Serializer):
     phone_number = serializers.CharField(required=True)

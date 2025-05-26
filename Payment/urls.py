@@ -1,14 +1,16 @@
-from django.urls import path, include
-from rest_framework.routers import DefaultRouter
-from .views import PaymentViewSet, UserPaymentsView
-router = DefaultRouter()
-router.register(r'payments', PaymentViewSet, basename='payment')
+from django.urls import path
+from .views import (
+    PaymentListView,
+    PaymentDetailView,
+    PaymentRefundView,
+    PaymentCancelView,
+    PaymentWebhookView
+)
 
 urlpatterns = [
-    path('', include(router.urls)),
-    path('course/<uuid:course_id>/payments/', PaymentViewSet.as_view({'get': 'course_payments'}), name='payment-course-payments'),
-    path('payments/verify/<str:payment_id>/', PaymentViewSet.as_view({'post': 'verify_payment'}), name='payment-verify'),
-    path('payments/checkout/<str:payment_id>/', PaymentViewSet.as_view({'get': 'checkout'}), name='payment-checkout'),
-    path('payments/webhook/<str:provider>/', PaymentViewSet.as_view({'post': 'webhook'}), name='payment-webhook'),
-    path('payments/my/', UserPaymentsView.as_view(), name='user-payments'),
+    path('payments/', PaymentListView.as_view(), name='payment-list'),
+    path('payments/<uuid:pk>/', PaymentDetailView.as_view(), name='payment-detail'),
+    path('payments/<uuid:pk>/refund/', PaymentRefundView.as_view(), name='payment-refund'),
+    path('payments/<uuid:pk>/cancel/', PaymentCancelView.as_view(), name='payment-cancel'),
+    path('payments/webhook/<str:provider>/', PaymentWebhookView.as_view(), name='payment-webhook'),
 ]
