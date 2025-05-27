@@ -2,19 +2,45 @@ from rest_framework import serializers
 from django.contrib.auth import authenticate
 from .models import CustomerUser, UserActivity, Notification
 
-class CustomerUserSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = CustomerUser
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'phone_number', 'is_active', 'is_staff', 'created_at', 'last_login']
-        read_only_fields = ['id', 'created_at', 'last_login']
+class CustomerUserSerializer(serializers.Serializer):
+    id = serializers.IntegerField(read_only=True)
+    username = serializers.CharField(max_length=150)
+    email = serializers.EmailField(required=False, allow_null=True, allow_blank=True)
+    first_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
+    last_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
+    role = serializers.ChoiceField(choices=[
+        ('admin', 'Admin'),
+        ('teacher', 'Teacher'),
+        ('student', 'Student'),
+    ], required=False)
+    phone_number = serializers.CharField(max_length=15, required=False, allow_null=True, allow_blank=True)
+    is_active = serializers.BooleanField(read_only=True)
+    is_staff = serializers.BooleanField(read_only=True)
+    created_at = serializers.DateTimeField(read_only=True)
+    last_login = serializers.DateTimeField(read_only=True)
 
-class CustomerUserCreateSerializer(serializers.ModelSerializer):
+    def create(self, validated_data):
+        return CustomerUser.objects.create(**validated_data)
+
+    def update(self, instance, validated_data):
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        return instance
+
+class CustomerUserCreateSerializer(serializers.Serializer):
+    username = serializers.CharField(max_length=150)
+    email = serializers.EmailField(required=False, allow_null=True, allow_blank=True)
+    phone_number = serializers.CharField(max_length=15, required=False, allow_null=True, allow_blank=True)
     password = serializers.CharField(write_only=True, required=True, style={'input_type': 'password'})
     password_confirm = serializers.CharField(write_only=True, required=True, style={'input_type': 'password'})
-
-    class Meta:
-        model = CustomerUser
-        fields = ['username', 'email', 'phone_number', 'password', 'password_confirm', 'first_name', 'last_name', 'role']
+    first_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
+    last_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
+    role = serializers.ChoiceField(choices=[
+        ('admin', 'Admin'),
+        ('teacher', 'Teacher'),
+        ('student', 'Student'),
+    ], required=False)
 
     def validate(self, data):
         if data['password'] != data['password_confirm']:
@@ -76,13 +102,36 @@ class PhoneVerificationSerializer(serializers.Serializer):
     phone_number = serializers.CharField(required=True)
     verification_code = serializers.CharField(required=True)
 
-class NotificationSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Notification
-        fields = ['id', 'type', 'title', 'message', 'is_read', 'created_at']
+class NotificationSerializer(serializers.Serializer):
+    id = serializers.IntegerField(read_only=True)
+    type = serializers.ChoiceField(choices=Notification.Types.choices)
+    title = serializers.CharField(max_length=200)
+    message = serializers.CharField()
+    is_read = serializers.BooleanField(default=False)
+    created_at = serializers.DateTimeField(read_only=True)
 
-class UserActivitySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = UserActivity
-        fields = ['id', 'user', 'activity_type', 'ip_address', 'user_agent', 'created_at']
-        read_only_fields = ['id', 'created_at']
+    def create(self, validated_data):
+        return Notification.objects.create(**validated_data)
+
+    def update(self, instance, validated_data):
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        return instance
+
+class UserActivitySerializer(serializers.Serializer):
+    id = serializers.IntegerField(read_only=True)
+    user = serializers.PrimaryKeyRelatedField(queryset=CustomerUser.objects.all())
+    activity_type = serializers.CharField(max_length=50)
+    ip_address = serializers.CharField(required=False, allow_null=True)
+    user_agent = serializers.CharField()
+    created_at = serializers.DateTimeField(read_only=True)
+
+    def create(self, validated_data):
+        return UserActivity.objects.create(**validated_data)
+
+    def update(self, instance, validated_data):
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        return instance

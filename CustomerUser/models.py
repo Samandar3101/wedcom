@@ -85,8 +85,16 @@ class CustomerUser(AbstractBaseUser, PermissionsMixin, BaseModel):
         verbose_name_plural = 'Users'
 
 class UserActivity(models.Model):
-    user = models.ForeignKey(CustomerUser, on_delete=models.CASCADE, related_name='activities')
-    activity_type = models.CharField(max_length=50)  # login, logout, password_change, etc.
+    ACTIVITY_TYPES = [
+        ('login', 'Login'),
+        ('login_attempt', 'Login Attempt'),
+        ('logout', 'Logout'),
+        ('password_change', 'Password Change'),
+        ('profile_view', 'Profile View'),
+    ]
+    
+    user = models.ForeignKey(CustomerUser, on_delete=models.CASCADE, related_name='activities', null=True, blank=True)
+    activity_type = models.CharField(max_length=50, choices=ACTIVITY_TYPES)
     ip_address = models.GenericIPAddressField()
     user_agent = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
@@ -94,6 +102,10 @@ class UserActivity(models.Model):
     class Meta:
         verbose_name = 'User Activity'
         verbose_name_plural = 'User Activities'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.user.username if self.user else 'Anonymous'} - {self.activity_type} at {self.created_at}"
 
 class Notification(models.Model):
     class Types(models.TextChoices):

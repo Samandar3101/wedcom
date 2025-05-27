@@ -16,6 +16,7 @@ import requests
 import json
 from datetime import timedelta
 from rest_framework import serializers
+from decimal import Decimal
 
 logger = logging.getLogger(__name__)
 
@@ -27,17 +28,58 @@ class PaymentListView(APIView):
     throttle_classes = [PaymentRateThrottle]
 
     def get(self, request):
-        payments = Payment.objects.filter(user=request.user)
-        serializer = PaymentSerializer(payments, many=True)
-        return Response(serializer.data)
+        try:
+            payments = Payment.objects.filter(user=request.user)
+            serializer = PaymentSerializer(payments, many=True)
+            return Response(serializer.data)
+        except Exception as e:
+            logger.error(f"Error fetching payments: {str(e)}")
+            return Response(
+                {"detail": "To'lovlarni olishda xatolik yuz berdi"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
     def post(self, request):
         try:
-            serializer = PaymentSerializer(data=request.data, context={'request': request})
-            serializer.is_valid(raise_exception=True)
+            # Validate course exists
+            course_id = request.data.get('course')
+            if not course_id:
+                return Response(
+                    {"course": "Kurs tanlanishi shart"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
             
-            # Check if user has active payment for this course
-            cache_key = f"payment_course_{serializer.validated_data['course'].id}_user_{request.user.id}"
+            try:
+                course = Course.objects.get(id=course_id)
+            except Course.DoesNotExist:
+                return Response(
+                    {"course": "Kurs topilmadi"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Validate payment method
+            method = request.data.get('method')
+            if not method:
+                return Response(
+                    {"method": "To'lov usuli kiritilishi shart"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            if method not in dict(Payment.PAYMENT_METHODS):
+                return Response(
+                    {"method": f"'{method}' to'g'ri to'lov usuli emas"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Validate cash payment limit
+            if method == 'cash' and course.price > Decimal('1000000'):
+                return Response(
+                    {"method": "Naqd pul orqali to'lov 1 million so'mdan oshmasligi kerak"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Check for existing active payment
+            cache_key = f"payment_course_{course.id}_user_{request.user.id}"
             if cache.get(cache_key):
                 return Response(
                     {"detail": "Sizda bu kurs uchun faol to'lov mavjud"},
@@ -45,26 +87,39 @@ class PaymentListView(APIView):
                 )
             
             # Get payment provider
-            provider = get_provider(serializer.validated_data['method'])
+            provider = get_provider(method)
             if not provider:
                 return Response(
-                    {"detail": "Noto'g'ri to'lov usuli"},
+                    {"method": "Noto'g'ri to'lov usuli"},
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
+            # amount ni requestdan olish (agar bor bo'lsa), yo'q bo'lsa course.price
+            amount = request.data.get('amount', course.price)
+            try:
+                amount = Decimal(amount)
+            except Exception:
+                amount = course.price
+            
             # Create payment in provider
             provider_data = provider.create_payment(
-                amount=serializer.validated_data['amount'],
+                amount=amount,
                 currency='UZS',
-                description=f"Course payment: {serializer.validated_data['course'].title}"
+                description=f"Course payment: {course.title}"
             )
             
             # Create payment in our system
-            payment = serializer.save(
-                user=request.user,
-                payment_provider_id=provider_data['provider_id'],
-                payment_provider_data=provider_data['provider_data']
-            )
+            payment_data = {
+                'course': course.id,  # Faqat id uzatiladi
+                'method': method,
+                'amount': amount,
+                'payment_provider_id': provider_data['provider_id'],
+                'payment_provider_data': provider_data['provider_data']
+            }
+            
+            serializer = PaymentSerializer(data=payment_data, context={'request': request})
+            serializer.is_valid(raise_exception=True)
+            payment = serializer.save(user=request.user)
             
             # Set cache to prevent multiple payments
             cache.set(cache_key, True, timeout=3600)  # 1 hour
@@ -153,8 +208,9 @@ class PaymentRefundView(APIView):
                     payment.course.enrolled_students.remove(payment.user)
                 return Response(PaymentSerializer(payment).data)
             else:
+                # Qaytarish uchun validatsiya xabarini qaytarish
                 return Response(
-                    {'error': 'Refund failed'},
+                    {"time": "To'lovdan keyin 30 kundan o'tgan bo'lsa, qaytarish mumkin emas"},
                     status=status.HTTP_400_BAD_REQUEST
                 )
         except serializers.ValidationError as e:
@@ -224,7 +280,13 @@ class PaymentWebhookView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
             payment_id = request.data.get('payment_id')
-            payment = get_object_or_404(Payment, payment_provider_id=payment_id)
+            try:
+                payment = Payment.objects.get(payment_provider_id=payment_id)
+            except Payment.DoesNotExist:
+                return Response(
+                    {"detail": "To'lov topilmadi"},
+                    status=status.HTTP_404_NOT_FOUND
+                )
             
             status_result = provider_instance.check_payment_status(payment_id)
             if status_result == 'completed':
