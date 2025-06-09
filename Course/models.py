@@ -24,6 +24,7 @@ class Course(BaseModel):
         ('intermediate', 'Intermediate'),
         ('advanced', 'Advanced'),
     ], null=True, blank=True)
+    enrolled_students = models.ManyToManyField(CustomerUser, related_name='enrolled_courses', blank=True)
 
     class Meta:
         verbose_name = 'Course'
@@ -45,7 +46,6 @@ class Lesson(BaseModel):
     video = models.FileField(upload_to='videos/', null=True, blank=True)
     duration = models.DurationField()
     order = models.PositiveIntegerField()
-    
 
     class Meta:
         verbose_name = 'Lesson'
@@ -72,4 +72,4 @@ class Review(BaseModel):
 
     class Meta:
         verbose_name = 'Review'
-        verbose_name_plural = 'Reviews' 
+        verbose_name_plural = 'Reviews'
